@@ -1,6 +1,7 @@
 import streamlit as st
 from modules.modulo1_presupuesto import resolver_presupuesto, CATEGORIAS
 from modules.modulo2_comidas import resolver_comidas
+from modules.modulo3_estudios import resolver_estudios, MATERIAS, DIAS, BLOQUES
 import plotly.express as px
 import pandas as pd
 
@@ -121,7 +122,62 @@ elif pagina == "M2 - Comidas":
 
 elif pagina == "M3 - Estudios":
     st.title("M3 - Calendario de Estudios")
-    st.write("Módulo en construcción")
+    st.markdown("**Tipo:** Programación Entera Mixta (MILP) | **Solver:** GLPK")
+    st.markdown("---")
+
+    st.markdown("**Prioridades por materia** (0 = baja, 1 = alta)")
+    prioridades = {}
+    for m in MATERIAS:
+        prioridades[m] = st.slider(m, 0.0, 1.0, 0.5, step=0.05, key=f"prio_{m}")
+
+    st.markdown("**Bloques bloqueados** (clases, compromisos fijos)")
+    st.caption("Selecciona los bloques en los que NO puedes estudiar")
+
+    bloques_bloqueados = []
+    for d in DIAS:
+        cols = st.columns(4)
+        for i, b in enumerate(BLOQUES):
+            with cols[i]:
+                if st.checkbox(f"{d} B{b}", key=f"block_{d}_{b}"):
+                    bloques_bloqueados.append((d, b))
+
+    max_bloques_dia = st.slider("Máximo de bloques de estudio por día", 1, 4, 3)
+
+    if st.button("Resolver", key="resolver_m3"):
+        resultado = resolver_estudios(bloques_bloqueados, prioridades, max_bloques_dia=max_bloques_dia)
+        st.write("Prioridades enviadas al modelo:", prioridades)
+
+        if resultado["estado"] == "optimo":
+            st.success("¡Calendario óptimo generado!")
+
+            # Mostrar calendario
+            st.markdown("### Calendario semanal")
+            import pandas as pd
+            filas = []
+            for d in DIAS:
+                fila = {"Día": d}
+                for b in BLOQUES:
+                    materia = resultado["calendario"][d][b]
+                    fila[f"Bloque {b}"] = materia if materia else "—"
+                filas.append(fila)
+
+            df_cal = pd.DataFrame(filas)
+            st.dataframe(df_cal, hide_index=True, use_container_width=True)
+
+            # Horas por materia
+            st.markdown("### Horas por materia")
+            df_horas = pd.DataFrame({
+                "Materia": list(resultado["horas_por_materia"].keys()),
+                "Horas/semana": list(resultado["horas_por_materia"].values()),
+            })
+            st.dataframe(df_horas, hide_index=True)
+
+            # Guardar para M4
+            st.session_state["bloques_libres"] = resultado["bloques_libres"]
+            st.info("Bloques libres guardados para el M4.")
+
+        else:
+            st.error("No se encontró solución. Reduce los bloques bloqueados o el mínimo de horas.")
 
 elif pagina == "M4 - Bienestar":
     st.title("M4 - Bienestar Estudiantil")
